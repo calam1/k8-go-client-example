@@ -76,33 +76,33 @@ func getVirtualServices(dynamic dynamic.Interface, ctx context.Context,
 			spec := item.Object["spec"]
 
 			fmt.Println(spec)
-
 			for k, v := range spec.(map[string]interface{}) {
 				fmt.Println(k, v)
 			}
-			fmt.Println("==========================")
-			gw := spec.(map[string]interface{})["gateways"].(interface{})
-			fmt.Printf("gateway %s\n", gw)
+			//fmt.Println("==========================")
+			//gw := spec.(map[string]interface{})["gateways"].(interface{})
+			//fmt.Printf("gateway %s\n", gw)
+			//
+			//hosts := spec.(map[string]interface{})["hosts"].(interface{})
+			//fmt.Printf("hosts %s\n", hosts)
+			//
+			//http := spec.(map[string]interface{})["http"].([]interface{})
+			//http_0 := http[0].(map[string]interface{})
+			//fmt.Printf("http %s\n", http[0])
+			//route := http_0["route"].([]interface{})
+			//route_0 := route[0].(map[string]interface{})
+			//fmt.Printf("route %s\n", route[0])
+			//destination := route_0["destination"].(map[string]interface{})
+			//fmt.Printf("destination %s\n", destination)
+			//host := destination["host"].(string)
+			//fmt.Printf("host %s\n", host)
+			//port_map := destination["port"].(interface{})
+			//fmt.Printf("port_map%s\n", port_map)
+			//port := port_map.(map[string]interface{})["number"].(int64)
+			//fmt.Printf("port %d\n", port)
+			//
+			//fmt.Printf("Name %s\n", item.GetName())
 
-			hosts := spec.(map[string]interface{})["hosts"].(interface{})
-			fmt.Printf("hosts %s\n", hosts)
-
-			http := spec.(map[string]interface{})["http"].([]interface{})
-			http_0 := http[0].(map[string]interface{})
-			fmt.Printf("http %s\n", http[0])
-			route := http_0["route"].([]interface{})
-			route_0 := route[0].(map[string]interface{})
-			fmt.Printf("route %s\n", route[0])
-			destination := route_0["destination"].(map[string]interface{})
-			fmt.Printf("destination %s\n", destination)
-			host := destination["host"].(string)
-			fmt.Printf("host %s\n", host)
-			port_map := destination["port"].(interface{})
-			fmt.Printf("port_map%s\n", port_map)
-			port := port_map.(map[string]interface{})["number"].(int64)
-			fmt.Printf("port %d\n", port)
-
-			fmt.Printf("Name %s\n", item.GetName())
 			// fmt.Printf("Namespace %s\n", item.GetNamespace())
 			// fmt.Printf("Kind %s\n", item.GetKind())
 			// fmt.Printf("Labels %s\n", item.GetLabels())
@@ -118,14 +118,44 @@ func getVirtualServices(dynamic dynamic.Interface, ctx context.Context,
 }
 
 func setVirtualServiceNewName(client dynamic.Interface, ctx context.Context,
-// in this particular example only one virtualservice is returned, thus
-// the hardcoding of the index is fine for now
+	// in this particular example only one virtualservice is returned, thus
+	// the hardcoding of the index is fine for now
 	virtualServiceName, newName, namespace string) error {
 
 	items, err := getVirtualServices(client, ctx, namespace)
 	if err != nil {
 		fmt.Println("error in getting virtualservices:", err)
 	}
+
+	spec := items[0].Object["spec"]
+
+	gateway := spec.(map[string]interface{})["gateways"].(interface{})
+	fmt.Printf("gateway %s\n", gateway)
+
+	hosts := spec.(map[string]interface{})["hosts"].(interface{})
+	fmt.Printf("hosts %s\n", hosts)
+
+	http := spec.(map[string]interface{})["http"].([]interface{})
+	http_0 := http[0].(map[string]interface{})
+	fmt.Printf("http %s\n", http[0])
+
+	route := http_0["route"].([]interface{})
+	route_0 := route[0].(map[string]interface{})
+	fmt.Printf("route %s\n", route[0])
+
+	destination := route_0["destination"].(map[string]interface{})
+	fmt.Printf("destination %s\n", destination)
+
+	host := destination["host"].(string)
+	fmt.Printf("host %s\n", host)
+
+	// port_map := destination["port"].(interface{})
+	port_map := destination["port"]
+	fmt.Printf("port_map%s\n", port_map)
+
+	// port := port_map.(map[string]interface{})["number"].(int64)
+	port := port_map.(map[string]interface{})["number"]
+	fmt.Printf("port %d\n", port)
 
 	//  Create a GVR which represents an Istio Virtual Service.
 	virtualServiceGVR := schema.GroupVersionResource{
@@ -134,7 +164,42 @@ func setVirtualServiceNewName(client dynamic.Interface, ctx context.Context,
 		Resource: "virtualservices",
 	}
 
-	virtualservice := &unstructured.Unstructured{
+	// virtualserviceNoFault := &unstructured.Unstructured{
+	// 	Object: map[string]interface{}{
+	// 		"apiVersion": "networking.istio.io/v1alpha3",
+	// 		"kind":       "VirtualService",
+	// 		"metadata": map[string]interface{}{
+	// 			"name":            items[0].GetName(),
+	// 			"namespace":       items[0].GetNamespace(),
+	// 			"uid":             items[0].GetUID(),
+	// 			"resourceVersion": items[0].GetResourceVersion(),
+	// 			"annotations":     items[0].GetAnnotations(),
+	// 			"labels":          items[0].GetLabels(),
+	// 		},
+	// 		"spec": &unstructured.UnstructuredList{
+	// 			Object: map[string]interface{}{
+	// 				"hosts":    hosts,
+	// 				"gateways": gateway,
+	// 				"http": []map[string]interface{}{
+	// 					{
+	// 						"route": []map[string]interface{}{
+	// 							{
+	// 								"destination": map[string]interface{}{
+	// 									"host": host,
+	// 									"port": map[string]interface{}{
+	// 										"number": port,
+	// 									},
+	// 								},
+	// 							},
+	// 						},
+	// 					},
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// }
+
+	virtualserviceFault := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "networking.istio.io/v1alpha3",
 			"kind":       "VirtualService",
@@ -148,17 +213,25 @@ func setVirtualServiceNewName(client dynamic.Interface, ctx context.Context,
 			},
 			"spec": &unstructured.UnstructuredList{
 				Object: map[string]interface{}{
-					"hosts": []string{"python-api-dev.preview.graingercloud.com"},
-					// "hosts": []string{},
-					"gateways": []string{items[0].GetName()},
+					"hosts":    hosts,
+					"gateways": gateway,
 					"http": []map[string]interface{}{
 						{
+							"fault": map[string]interface{}{
+								"abort": map[string]interface{}{
+									"httpStatus": 500,
+									"percentage": map[string]interface{}{
+										"value": 100,
+									},
+								},
+							},
 							"route": []map[string]interface{}{
 								{
 									"destination": map[string]interface{}{
-										// "host": "python-api-v1",
-										"host": newName,
-										"port": 80,
+										"host": host,
+										"port": map[string]interface{}{
+											"number": port,
+										},
 									},
 								},
 							},
@@ -171,7 +244,7 @@ func setVirtualServiceNewName(client dynamic.Interface, ctx context.Context,
 
 	// dry run
 	// result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualservice, metav1.UpdateOptions{DryRun: []string{"All"}})
-	result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualservice, metav1.UpdateOptions{})
+	result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualserviceFault, metav1.UpdateOptions{})
 
 	if err != nil {
 		fmt.Println("error in updating virtualservice:", err)
