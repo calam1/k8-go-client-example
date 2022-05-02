@@ -24,7 +24,7 @@ func main() {
 		fmt.Println("Usage: go run ./main.go <resource> <approach>")
 		fmt.Println("\tresource: deployments | virtualservices")
 		fmt.Println("\tapproach for resource type deployments: clientset | dynamic | dynamic-jq | clientset-query")
-		fmt.Println("\tapproach for resource type virtualservices : get-all | set-weights | new-name")
+		fmt.Println("\tapproach for resource type virtualservices : get-all | fault")
 		return
 	}
 
@@ -44,13 +44,9 @@ func main() {
 		if value == "get-all" {
 			fmt.Println("using get-all")
 			getVirtualServices(dynamic, ctx, namespace)
-		} else if value == "set-weights" {
-			fmt.Println("using set-weights")
-			setVirtualServiceWeights(dynamic, ctx, "python-api", namespace, 50, 50)
-		} else if value == "new-name" {
-			fmt.Println("using new-name")
-			setVirtualServiceNewName(dynamic, ctx, "python-api", "python-api-v1", namespace)
-
+		} else if value == "fault" {
+			fmt.Println("using fault")
+			setVirtualServiceFaultForApp(dynamic, ctx, "app.kubernetes.io/name", "python-api", namespace)
 		} else {
 			fmt.Println("unknown approach")
 		}
@@ -59,7 +55,7 @@ func main() {
 
 func getVirtualServices(dynamic dynamic.Interface, ctx context.Context,
 	namespace string) ([]unstructured.Unstructured, error) {
-	fmt.Println("using dynamic")
+	fmt.Println("using dynamic getAllVirtualServices")
 	// get all virtualservices
 	resourceId := schema.GroupVersionResource{
 		Group:    "networking.istio.io",
@@ -79,60 +75,106 @@ func getVirtualServices(dynamic dynamic.Interface, ctx context.Context,
 			for k, v := range spec.(map[string]interface{}) {
 				fmt.Println(k, v)
 			}
-			//fmt.Println("==========================")
-			//gw := spec.(map[string]interface{})["gateways"].(interface{})
-			//fmt.Printf("gateway %s\n", gw)
-			//
-			//hosts := spec.(map[string]interface{})["hosts"].(interface{})
-			//fmt.Printf("hosts %s\n", hosts)
-			//
-			//http := spec.(map[string]interface{})["http"].([]interface{})
-			//http_0 := http[0].(map[string]interface{})
-			//fmt.Printf("http %s\n", http[0])
-			//route := http_0["route"].([]interface{})
-			//route_0 := route[0].(map[string]interface{})
-			//fmt.Printf("route %s\n", route[0])
-			//destination := route_0["destination"].(map[string]interface{})
-			//fmt.Printf("destination %s\n", destination)
-			//host := destination["host"].(string)
-			//fmt.Printf("host %s\n", host)
-			//port_map := destination["port"].(interface{})
-			//fmt.Printf("port_map%s\n", port_map)
-			//port := port_map.(map[string]interface{})["number"].(int64)
-			//fmt.Printf("port %d\n", port)
-			//
-			//fmt.Printf("Name %s\n", item.GetName())
-
-			// fmt.Printf("Namespace %s\n", item.GetNamespace())
-			// fmt.Printf("Kind %s\n", item.GetKind())
-			// fmt.Printf("Labels %s\n", item.GetLabels())
-			// fmt.Printf("APIVersion %s\n", item.GetAPIVersion())
-			// fmt.Printf("UID %s\n", item.GetUID())
-			// fmt.Printf("ResourceVersion %s\n", item.GetResourceVersion())
-			// fmt.Printf("Annotations %s\n", item.GetAnnotations())
-			// fmt.Printf("%+v\n", item)
 		}
 	}
 
 	return items, nil
 }
 
-func setVirtualServiceNewName(client dynamic.Interface, ctx context.Context,
-	// in this particular example only one virtualservice is returned, thus
-	// the hardcoding of the index is fine for now
-	virtualServiceName, newName, namespace string) error {
+func getVirtualServiceByAppName(dynamic dynamic.Interface, ctx context.Context, labelKey,
+	labelAppNameValue, namespace string) ([]unstructured.Unstructured, error) {
+	fmt.Println("using dynamic getVirtualServiceByAppName")
 
-	items, err := getVirtualServices(client, ctx, namespace)
+	resourceId := schema.GroupVersionResource{
+		Group:    "networking.istio.io",
+		Version:  "v1alpha3",
+		Resource: "virtualservices",
+	}
+
+	query := fmt.Sprintf(".metadata.labels[\"%s\"] == \"%s\"", labelKey, labelAppNameValue)
+	// query := ".metadata.labels[\"app.kubernetes.io/managed-by\"] == \"Helm\""
+	// items, err := GetResourcesDynamicallyByJq(dynamic, ctx, namespace, resourceId, query)
+
+	items, err := GetResourcesDynamicallyByJq(dynamic, ctx, namespace, resourceId, query)
+	if len(items) == 0 {
+		return nil, fmt.Errorf("no virtualservices found for app %s, in namespace %s", labelAppNameValue, namespace)
+	}
+
+	if len(items) > 1 {
+		return nil, fmt.Errorf("more than one virtualservice found for app %s, in namespace %s, found total of %d", labelAppNameValue, namespace, len(items))
+	}
+
+	if err != nil {
+		fmt.Println("error in getVirtualServiceByName", err)
+		return nil, err
+	} else {
+		for _, item := range items {
+			spec := item.Object["spec"]
+
+			fmt.Println(spec)
+
+			// fmt.Println(spec)
+			// for k, v := range spec.(map[string]interface{}) {
+			// 	fmt.Println(k, v)
+			// }
+
+			fmt.Println("==========================")
+			gateway := spec.(map[string]interface{})["gateways"]
+			fmt.Printf("gateway %s\n", gateway)
+
+			hosts := spec.(map[string]interface{})["hosts"]
+			fmt.Printf("hosts %s\n", hosts)
+
+			http := spec.(map[string]interface{})["http"].([]interface{})
+			http_0 := http[0].(map[string]interface{})
+			fmt.Printf("http %s\n", http[0])
+
+			route := http_0["route"].([]interface{})
+			route_0 := route[0].(map[string]interface{})
+			fmt.Printf("route %s\n", route[0])
+
+			destination := route_0["destination"].(map[string]interface{})
+			fmt.Printf("destination %s\n", destination)
+
+			host := destination["host"].(string)
+			fmt.Printf("host %s\n", host)
+
+			port_map := destination["port"]
+			fmt.Printf("port_map %s\n", port_map)
+
+			port := port_map.(map[string]interface{})["number"].(int)
+			fmt.Printf("port %d\n", port)
+
+			fmt.Printf("Name %s\n", item.GetName())
+			fmt.Printf("Namespace %s\n", item.GetNamespace())
+			fmt.Printf("Kind %s\n", item.GetKind())
+			fmt.Printf("Labels %s\n", item.GetLabels())
+			fmt.Printf("APIVersion %s\n", item.GetAPIVersion())
+			fmt.Printf("UID %s\n", item.GetUID())
+			fmt.Printf("ResourceVersion %s\n", item.GetResourceVersion())
+			fmt.Printf("Annotations %s\n", item.GetAnnotations())
+			fmt.Printf("%+v\n", item)
+		}
+	}
+
+	return items, nil
+}
+
+func setVirtualServiceFaultForApp(client dynamic.Interface, ctx context.Context,
+	labelKey, labelAppNameValue, namespace string) error {
+
+	items, err := getVirtualServiceByAppName(client, ctx, labelKey, labelAppNameValue, namespace)
 	if err != nil {
 		fmt.Println("error in getting virtualservices:", err)
+		return err
 	}
 
 	spec := items[0].Object["spec"]
 
-	gateway := spec.(map[string]interface{})["gateways"].(interface{})
+	gateway := spec.(map[string]interface{})["gateways"]
 	fmt.Printf("gateway %s\n", gateway)
 
-	hosts := spec.(map[string]interface{})["hosts"].(interface{})
+	hosts := spec.(map[string]interface{})["hosts"]
 	fmt.Printf("hosts %s\n", hosts)
 
 	http := spec.(map[string]interface{})["http"].([]interface{})
@@ -149,11 +191,9 @@ func setVirtualServiceNewName(client dynamic.Interface, ctx context.Context,
 	host := destination["host"].(string)
 	fmt.Printf("host %s\n", host)
 
-	// port_map := destination["port"].(interface{})
 	port_map := destination["port"]
 	fmt.Printf("port_map%s\n", port_map)
 
-	// port := port_map.(map[string]interface{})["number"].(int64)
 	port := port_map.(map[string]interface{})["number"]
 	fmt.Printf("port %d\n", port)
 
@@ -243,8 +283,8 @@ func setVirtualServiceNewName(client dynamic.Interface, ctx context.Context,
 	}
 
 	// dry run
-	// result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualservice, metav1.UpdateOptions{DryRun: []string{"All"}})
-	result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualserviceFault, metav1.UpdateOptions{})
+	result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualserviceFault, metav1.UpdateOptions{DryRun: []string{"All"}})
+	// result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualserviceFault, metav1.UpdateOptions{})
 
 	if err != nil {
 		fmt.Println("error in updating virtualservice:", err)
@@ -252,91 +292,6 @@ func setVirtualServiceNewName(client dynamic.Interface, ctx context.Context,
 	}
 
 	fmt.Println("VirtualService update result: ", result)
-
-	return nil
-}
-
-//  patchStringValue specifies a patch operation for a string.
-// type patchStringValue struct {
-// 	Op    string `json:"op"`
-// 	Path  string `json:"path"`
-// 	Value string `json:"value"`
-// }
-
-//  patchStringValue specifies a patch operation for a uint32
-// type patchUInt32Value struct {
-// 	Op    string `json:"op"`
-// 	Path  string `json:"path"`
-// 	Value uint32 `json:"value"`
-// }
-
-// https://gist.github.com/dwmkerr/7332888e092156ce8ce4ea551b0c321f
-func setVirtualServiceWeights(client dynamic.Interface, ctx context.Context, virtualServiceName, namespace string, weight1, weight2 uint32) error {
-	//  Create a GVR which represents an Istio Virtual Service.
-	virtualServiceGVR := schema.GroupVersionResource{
-		Group:    "networking.istio.io",
-		Version:  "v1alpha3",
-		Resource: "virtualservices",
-	}
-
-	//  PATCH - begin
-	//  Weight the two routes - 50/50.
-	// patchPayload := make([]patchUInt32Value, 2)
-	// patchPayload[0].Op = "replace"
-	// patchPayload[0].Path = "/spec/http/0/route/0/weight"
-	// patchPayload[0].Value = weight1
-	// patchPayload[1].Op = "replace"
-	// patchPayload[1].Path = "/spec/http/0/route/1/weight"
-	// patchPayload[1].Value = weight2
-	// patchBytes, _ := json.Marshal(patchPayload)
-
-	// fmt.Println("before patchBytes: ", string(patchBytes))
-
-	// https://github.com/kubernetes/client-go/blob/master/dynamic/interface.go
-	//  Apply the patch to the 'service2' service. - patch won't work cause that is an update of an existing specific structure/state
-	// result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Patch(ctx, virtualServiceName, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
-	//  PATCH - end
-
-	virtualservice := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "networking.istio.io/v1alpha3",
-			"kind":       "VirtualService",
-			"metadata": map[string]interface{}{
-				"name":            "python-api",
-				"namespace":       "resiliency-dev",
-				"uid":             "943b8484-3d5b-477b-b5cb-af09a2c3daee",
-				"resourceVersion": "1553172",
-			},
-			"spec": &unstructured.UnstructuredList{
-				Object: map[string]interface{}{
-					"hosts": []string{"python-api-dev.preview.graingercloud.com"},
-					"http": []map[string]interface{}{
-						{
-							"route": []map[string]interface{}{
-								{
-									"destination": map[string]interface{}{
-										"host": "python-api",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// Update(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
-	// dry run
-	result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualservice, metav1.UpdateOptions{DryRun: []string{"All"}})
-	// result, err := client.Resource(virtualServiceGVR).Namespace(namespace).Update(ctx, virtualservice, metav1.UpdateOptions{})
-
-	if err != nil {
-		fmt.Println("error in patching/updating/etc virtualservice:", err)
-		return err
-	}
-
-	fmt.Println("VirtualService patch/update/etc result: ", result)
 
 	return nil
 }
@@ -438,7 +393,7 @@ func GetResourcesDynamically(dynamic dynamic.Interface, ctx context.Context,
 func GetResourcesDynamicallyByJq(dynamic dynamic.Interface, ctx context.Context,
 	namespace string, resoureId schema.GroupVersionResource, jq string) (
 	[]unstructured.Unstructured, error) {
-
+	fmt.Println("GetResourcesDynamicallyByJq query is:", jq)
 	resources := make([]unstructured.Unstructured, 0)
 
 	query, err := gojq.Parse(jq)
